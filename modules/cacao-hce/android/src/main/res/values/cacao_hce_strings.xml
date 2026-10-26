@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="cacao_hce_service_description">Credencial CacaoPass para el acceso a planta</string>
+  <string name="cacao_hce_aid_description">Credencial de acceso CacaoPass</string>
+</resources>

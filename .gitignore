@@ -41,3 +41,13 @@ example
 # generated native folders
 /ios
 /android
+
+# Reporte: el PDF final se agrega a mano; la guía de conclusiones es de uso personal
+reporte/*.pdf
+reporte/guia_conclusiones.md
+
+# Salida de Gradle de los módulos locales
+**/build/
+.gradle/
+local.properties
+*.iml

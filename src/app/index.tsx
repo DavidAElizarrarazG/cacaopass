@@ -1,98 +1,123 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRef, useState } from "react";
+import { Image, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Redirect, router } from "expo-router";
+import AppButton from "../components/AppButton";
+import Notice from "../components/Notice";
+import { login, LoginError } from "../api/monsterball";
+import { useSession } from "../session";
+import { styles } from "../styles";
+import { colors, spacing } from "../theme";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+type FieldErrors = { username?: string; password?: string };
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function Login() {
+  const { user, ready, signIn } = useSession();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [error, setError] = useState<LoginError | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+
+  if (!ready) return <View style={styles.screen} />;
+  if (user) return <Redirect href="/credencial" />;
+
+  const submit = async () => {
+    // Se valida antes de llamar al servidor para no gastar una petición en un campo vacío.
+    const errors: FieldErrors = {
+      username: username.trim() ? undefined : "Escribe tu nombre de usuario",
+      password: password ? undefined : "Escribe tu contraseña",
+    };
+    setFieldErrors(errors);
+    setError(null);
+    if (errors.username || errors.password) return;
+
+    setLoading(true);
+    try {
+      await signIn(await login(username, password));
+      setPassword("");
+      router.replace("/credencial");
+    } catch (e) {
+      setError(e instanceof LoginError ? e : new LoginError("format"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <SafeAreaView style={styles.screen}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <ScrollView contentContainerStyle={[styles.content, { flexGrow: 1, justifyContent: "center" }]}>
+          <View style={{ alignItems: "center", gap: spacing.sm }}>
+            <Image
+              source={require("../../assets/images/logo.png")}
+              style={{ width: 128, height: 128 }}
+              accessibilityLabel="Logotipo de CacaoPass"
+            />
+            <Text style={styles.title}>CacaoPass</Text>
+            <Text style={styles.subtitle}>Credencial digital de acceso a planta chocolatera</Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.label}>Usuario</Text>
+            <TextInput
+              style={[styles.input, fieldErrors.username && styles.inputError]}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Tu usuario de Monsterball Go"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              editable={!loading}
+            />
+            {fieldErrors.username ? <Text style={styles.fieldError}>{fieldErrors.username}</Text> : null}
+
+            <Text style={[styles.label, { marginTop: spacing.sm }]}>Contraseña</Text>
+            <View style={styles.row}>
+              <TextInput
+                ref={passwordRef}
+                style={[styles.input, { flex: 1 }, fieldErrors.password && styles.inputError]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Contraseña"
+                placeholderTextColor={colors.muted}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="current-password"
+                textContentType="password"
+                returnKeyType="done"
+                onSubmitEditing={submit}
+                editable={!loading}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={8}
+              >
+                <Text style={[styles.muted, { color: colors.accent, fontWeight: "700" }]}>
+                  {showPassword ? "Ocultar" : "Mostrar"}
+                </Text>
+              </Pressable>
+            </View>
+            {fieldErrors.password ? <Text style={styles.fieldError}>{fieldErrors.password}</Text> : null}
+          </View>
+
+          {error ? <Notice tone="error" title={error.message} detail={error.detail} /> : null}
+
+          <View style={{ alignItems: "center", gap: spacing.sm }}>
+            <AppButton label="Entrar" onPress={submit} loading={loading} />
+            <AppButton label="Créditos" variant="secondary" onPress={() => router.push("/creditos")} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});

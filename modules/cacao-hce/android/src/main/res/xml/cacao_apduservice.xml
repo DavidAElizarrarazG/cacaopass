@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+  android:description="@string/cacao_hce_service_description"
+  android:requireDeviceUnlock="true">
+  <aid-group
+    android:category="other"
+    android:description="@string/cacao_hce_aid_description">
+    <!-- Mismo AID que envía el firmware ScannerHTTP.ino en su SELECT: F0 12 34 56 78 -->
+    <aid-filter android:name="F012345678" />
+  </aid-group>
+</host-apdu-service>

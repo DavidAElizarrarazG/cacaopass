@@ -1,0 +1,23 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.NFC" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- required="false": la app se instala también en equipos sin HCE (p. ej. el emulador) y avisa en pantalla -->
+  <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
+
+  <application>
+    <!-- Servicio de emulación de tarjeta: Android lo despierta cuando un lector selecciona nuestro AID -->
+    <service
+      android:name=".CacaoApduService"
+      android:exported="true"
+      android:permission="android.permission.BIND_NFC_SERVICE">
+      <intent-filter>
+        <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+      <meta-data
+        android:name="android.nfc.cardemulation.host_apdu_service"
+        android:resource="@xml/cacao_apduservice" />
+    </service>
+  </application>
+</manifest>

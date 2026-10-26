@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Práctica 4 - CacaoPass</title>
+<style>
+  @page { size: Letter; margin: 118px 60px 96px 60px; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Calibri, Carlito, "Helvetica Neue", Arial, sans-serif; font-size: 12pt; line-height: 1.32; color: #000; margin: 0; }
+  .meta { display: grid; grid-template-columns: 150px 1fr; row-gap: 2px; margin: 6px 0 12px 12px; font-size: 11.5pt; }
+  h1 { font-size: 16pt; color: #1f3864; margin: 10px 0 8px; }
+  h2 { font-size: 14pt; color: #d21034; margin: 18px 0 6px; padding-top: 6px; border-top: 1.5px dotted #888; break-after: avoid; }
+  h3 { font-size: 12pt; margin: 10px 0 2px; break-after: avoid; }
+  p { margin: 0 0 8px 12px; text-align: justify; }
+  ul, ol { margin: 0 0 8px 12px; padding-left: 22px; }
+  li { margin-bottom: 3px; }
+  table { border-collapse: collapse; width: calc(100% - 12px); margin: 4px 0 4px 12px; font-size: 9.5pt; break-inside: avoid; }
+  th { background: #000; color: #fff; font-weight: 400; padding: 4px 6px; text-align: center; }
+  td { border: 0.75px solid #777; padding: 4px 6px; vertical-align: middle; }
+  td.c { text-align: center; }
+  .cap { font-size: 9pt; font-style: italic; text-align: center; margin: 4px 24px 10px; }
+  figure { margin: 6px 0 0; text-align: center; break-inside: avoid; }
+  figure img { max-width: 100%; }
+  .shots { display: flex; gap: 10px; justify-content: center; align-items: flex-start; }
+  .shots img { height: 340px; width: auto; border: 1px solid #bbb; border-radius: 6px; }
+  code, pre { font-family: Consolas, Menlo, monospace; font-size: 9.5pt; }
+  pre { background: #f3f3f3; border: 1px solid #ddd; padding: 6px 8px; margin: 4px 0 8px 12px; white-space: pre-wrap; break-inside: avoid; }
+  .todo { background: #fff2a8; padding: 0 3px; }
+  .slot { border: 2px dashed #c9a400; background: #fffbe0; color: #6b5800; padding: 26px 12px; margin: 6px 12px 10px; text-align: center; font-size: 10.5pt; }
+  .ref { margin-left: 12px; padding-left: 28px; text-indent: -28px; margin-bottom: 6px; text-align: left; }
+  .nb { break-inside: avoid; }
+</style>
+</head>
+<body>
+<div class="meta">
+  <div>Asignatura:</div><div>APLICACIONES MÓVILES</div>
+  <div>Docente:</div><div>Felipe Mandujano Gómez</div>
+  <div>Alumnos:</div><div>David Alejandro Elizarraraz García 220437<br>Diego Sastre Villaseñor 221320</div>
+  <div>Fecha de entrega:</div><div><span class="todo">[fecha de entrega]</span></div>
+  <div>Repositorio:</div><div><span class="todo">https://github.com/DavidAElizarrarazG/cacaopass</span></div>
+</div>
+
+<h1>PRÁCTICA NÚMERO 4: Aplicación cliente de un sistema de acceso físico con NFC, React Native y Expo</h1>
+
+<h2>Objetivo</h2>
+<p>Aplicar conceptos de programación avanzada con React Native y Expo para desarrollar la aplicación móvil cliente de un sistema de acceso físico existente, formado por un escáner NFC (Arduino Nano ESP32 con un lector PN532) y un servidor web. De manera específica, se desarrolla <b>CacaoPass</b>, la credencial digital de una fábrica de chocolates, que autentica al usuario contra la API de la práctica 2, muestra su credencial con foto, nombre completo y número de usuario, y se comunica con el escáner mediante NFC y el protocolo APDU para entregarle ese número en 4 bytes, de modo que sea el escáner quien decida si concede el acceso.</p>
+
+<h2>Introducción y Consideraciones Teóricas</h2>
+<p><b>NFC.</b> La comunicación de campo cercano (<i>Near Field Communication</i>) es una tecnología inalámbrica de corto alcance (pocos centímetros) que opera a 13.56 MHz por acoplamiento inductivo entre dos antenas. Se apoya en la norma ISO/IEC 14443 (tipos A y B) y admite tres modos: lector/escritor, en el que el dispositivo lee etiquetas pasivas; punto a punto, entre dos dispositivos activos; y emulación de tarjeta, en el que el dispositivo se comporta como una tarjeta sin contacto ante un lector externo. Este último modo es el que convierte al teléfono en una credencial.</p>
+<p><b>Emulación de tarjeta basada en el anfitrión (HCE).</b> Desde Android 4.4 una aplicación puede emular una tarjeta sin necesidad de un elemento seguro: el controlador NFC entrega los comandos del lector al procesador principal y Android los dirige a un servicio que extiende <code>HostApduService</code>. El servicio declara en un archivo XML los identificadores de aplicación (AID) que atiende, agrupados en la categoría <code>payment</code> o <code>other</code>. Cuando el lector envía un comando SELECT con un AID, Android despierta al servicio registrado para ese AID (aunque la aplicación esté cerrada), le entrega los comandos en <code>processCommandApdu()</code> y le avisa con <code>onDeactivated()</code> cuando el enlace se pierde o el lector selecciona otra aplicación. Si varias aplicaciones registran el mismo AID en la categoría <code>other</code>, la actividad que está en primer plano puede pedir prioridad con <code>CardEmulation.setPreferredService()</code>. El atributo <code>requireDeviceUnlock</code> impide que el servicio responda con el teléfono bloqueado.</p>
+<p><b>Protocolo APDU.</b> La norma ISO/IEC 7816-4 define las unidades de datos de protocolo de aplicación (APDU) con las que un lector y una tarjeta intercambian comandos; sobre NFC viajan encapsuladas por la capa ISO-DEP (ISO/IEC 14443-4). Un comando se compone de un encabezado de cuatro bytes, CLA (clase), INS (instrucción), P1 y P2 (parámetros), seguido opcionalmente de Lc (longitud de los datos), los datos y Le (longitud esperada de la respuesta). La respuesta contiene datos opcionales y dos bytes de estado, SW1 y SW2: <code>90 00</code> indica éxito, <code>69 85</code> que no se cumplen las condiciones de uso, <code>6D 00</code> una instrucción no soportada y <code>6F 00</code> un error sin diagnóstico preciso. El comando SELECT por nombre (<code>00 A4 04 00 Lc AID</code>) elige la aplicación con la que se hablará. Un AID mide de 5 a 16 bytes; los que comienzan con <code>F</code> son propietarios, no registrados, adecuados para sistemas cerrados como este, cuyo AID es <code>F0 12 34 56 78</code>.</p>
+<p><b>El escáner.</b> El controlador PN532 de NXP actúa como lector ISO/IEC 14443 y se comunica con el microcontrolador por UART de alta velocidad (HSU), I2C o SPI, según dos interruptores de la placa Elechouse. El firmware del docente usa HSU porque I2C resultó inestable con los intercambios APDU de Android. Con <code>readPassiveTargetID()</code> detecta una tarjeta o teléfono, con <code>inDataExchange()</code> envía el SELECT y, si la respuesta termina en <code>90 00</code>, toma sus primeros cuatro bytes como número de usuario y lo consulta por HTTP en el servidor, que responde «si» o «no» según el estado del usuario en la base de datos y notifica el intento al panel web por WebSockets.</p>
+<p><b>Orden de los bytes (<i>endianness</i>).</b> Un entero de 32 bits ocupa cuatro bytes, que pueden guardarse empezando por el más significativo (<i>big-endian</i>, el orden de red y el que usan por defecto Java y Kotlin) o por el menos significativo (<i>little-endian</i>). El procesador Xtensa LX7 del ESP32-S3 es <i>little-endian</i>; como el firmware copia los cuatro bytes recibidos a un <code>uint32_t</code> con <code>memcpy</code>, los interpreta en ese orden. Por lo tanto, el número 220437 (<code>0x00035D15</code>) debe enviarse como <code>15 5D 03 00</code>; enviado como <code>00 03 5D 15</code>, el escáner leería 358417152.</p>
+<p><b>React Native, Expo y módulos nativos.</b> React Native construye interfaces nativas a partir de componentes de React escritos en TypeScript. Expo añade herramientas y bibliotecas sobre él; su aplicación <i>Expo Go</i> solo incluye los módulos nativos que trae de fábrica, así que una aplicación con código nativo propio requiere una compilación de desarrollo (<i>development build</i>). Con la Generación Nativa Continua, <code>npx expo prebuild</code> genera la carpeta <code>android/</code> a partir de <code>app.json</code> y de los complementos de configuración, y la API de Módulos de Expo (<i>Expo Modules API</i>) permite escribir módulos en Kotlin con un lenguaje declarativo (<code>Name</code>, <code>Function</code>, <code>Events</code>, eventos del ciclo de vida) que se enlazan automáticamente desde la carpeta <code>modules/</code>; el <code>AndroidManifest.xml</code> del módulo se fusiona con el de la aplicación al compilar. Para el estado se usan los <i>hooks</i> de React (<code>useState</code>, <code>useEffect</code>) y un contexto (<code>createContext</code>) para compartir la sesión entre pantallas; la navegación se resuelve con Expo Router, donde cada archivo de <code>src/app/</code> es una ruta.</p>
+<p><b>Autenticación y almacenamiento.</b> La API de Monsterball Go recibe el usuario y el resumen SHA-256 de la contraseña en un formulario (<code>POST /api/login</code>) y, como se documentó en la práctica 2, responde con HTTP 200 aun cuando el acceso falla, por lo que el resultado real está en el campo <code>error</code>. Para recordar la sesión se usa <code>expo-secure-store</code>, que en Android cifra los datos con una clave del Android Keystore. Las variables de entorno con prefijo <code>EXPO_PUBLIC_</code> se incrustan en el código empaquetado: sirven para no publicar el token en el repositorio, pero no lo vuelven secreto dentro del APK.</p>
+<p><b>Usabilidad.</b> Se aplican las heurísticas de Nielsen: visibilidad del estado del sistema (H1: estado del NFC y aviso de «Lector detectado»), prevención de errores (H5: validación de campos antes de llamar al servidor) y ayuda para reconocer y recuperarse de errores (H9: mensajes en lenguaje llano con una acción concreta).</p>
+
+<h2>Material y Equipo</h2>
+<table>
+  <tr><th style="width:80px">CANTIDAD</th><th>MATERIAL Y EQUIPO</th></tr>
+  <tr><td class="c">1</td><td>Computadora personal MacBook Pro (Intel) con macOS, Node.js 22.18 y npm 10.9</td></tr>
+  <tr><td class="c">1</td><td>Expo SDK 57 (expo 57.0.31), React Native 0.86.3, React 19.2.3, Expo Router 57.0.29 y TypeScript 6.0, con <code>expo-crypto</code>, <code>expo-secure-store</code>, <code>expo-image</code> y <code>react-native-svg</code></td></tr>
+  <tr><td class="c">1</td><td>Android Studio con Android SDK, Amazon Corretto JDK 17 y Gradle 9.3.1 para compilar el proyecto nativo</td></tr>
+  <tr><td class="c">1</td><td>Dispositivo virtual Android (AVD) para probar la interfaz; el emulador no tiene NFC</td></tr>
+  <tr><td class="c">1</td><td>Teléfono Android con NFC y soporte HCE para la demostración: <span class="todo">[marca, modelo y versión de Android]</span></td></tr>
+  <tr><td class="c">1</td><td>Escáner NFC proporcionado por el docente: Arduino Nano ESP32 con lector Elechouse PN532 v3 en modo HSU y firmware <code>ScannerHTTP.ino</code></td></tr>
+  <tr><td class="c">1</td><td>Servidor del sistema en monsterballgo.com: API de usuarios, endpoint del escáner y panel web de visualización</td></tr>
+  <tr><td class="c">1</td><td>Arduino IDE y Visual Studio Code para revisar el firmware y editar el código</td></tr>
+  <tr><td class="c">1</td><td>Asistente de programación con IA (Claude Code) como apoyo para escribir código, gráficos y documentación</td></tr>
+</table>
+
+<h2>Desarrollo Experimental</h2>
+<p><b>1. Análisis del sistema existente.</b> Antes de programar se revisó el repositorio del docente (<i>NFCAccesoFisico</i>), que contiene el firmware, el servidor en Node.js con Express y la aplicación nativa de ejemplo en Kotlin. Del firmware se obtuvieron los tres datos que la aplicación debe respetar: el AID <code>F0 12 34 56 78</code>, que la respuesta debe terminar en <code>90 00</code> y que el número de usuario se toma de los primeros cuatro bytes con <code>memcpy</code>, es decir, en orden <i>little-endian</i>. También se observó que el firmware reserva el último byte <code>0xFE</code> y <code>0xDE</code> para las dos credenciales de la aplicación de ejemplo (<code>DEADCAFE</code> y <code>DEADC0DE</code>). Del servidor se confirmó que el endpoint del escáner busca el número de usuario en la tabla <code>user</code> y concede el acceso solo si su estado es <code>active</code>. La figura 1 resume el flujo completo.</p>
+
+<figure>
+<svg viewBox="0 0 780 290" width="640" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif" font-size="11">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <g font-weight="700" text-anchor="middle" fill="#fff">
+    <rect x="5" y="8" width="150" height="34" rx="6" fill="#3a261c"/><text x="80" y="29">App CacaoPass (HCE)</text>
+    <rect x="265" y="8" width="150" height="34" rx="6" fill="#00878f"/><text x="340" y="29">Escáner ESP32 + PN532</text>
+    <rect x="465" y="8" width="160" height="34" rx="6" fill="#1f3864"/><text x="545" y="29">Servidor Express + MySQL</text>
+    <rect x="655" y="8" width="120" height="34" rx="6" fill="#d21034"/><text x="715" y="29">Panel web</text>
+  </g>
+  <g stroke="#999" stroke-dasharray="4 4"><line x1="80" y1="42" x2="80" y2="285"/><line x1="340" y1="42" x2="340" y2="285"/><line x1="545" y1="42" x2="545" y2="285"/><line x1="715" y1="42" x2="715" y2="285"/></g>
+  <g stroke="#333" fill="none" marker-end="url(#a)">
+    <line x1="340" y1="72" x2="85" y2="72"/>
+    <line x1="340" y1="112" x2="85" y2="112"/>
+    <line x1="80" y1="152" x2="335" y2="152"/>
+    <line x1="340" y1="192" x2="540" y2="192"/>
+    <line x1="545" y1="227" x2="345" y2="227"/>
+    <line x1="545" y1="262" x2="710" y2="262"/>
+  </g>
+  <g fill="#000" text-anchor="middle">
+    <text x="210" y="66">readPassiveTargetID (ISO 14443A)</text>
+    <text x="210" y="106">SELECT 00 A4 04 00 05 F0 12 34 56 78 00</text>
+    <text x="210" y="146">15 5D 03 00 · 90 00 (y el teléfono vibra)</text>
+    <text x="442" y="186">GET /api/scanner?id=220437</text>
+    <text x="442" y="221">«si» / «no» → LED verde o rojo</text>
+    <text x="630" y="256">WebSocket: intento</text>
+  </g>
+</svg>
+<div class="cap">Figura 1. Flujo de un intento de acceso: la app solo entrega el número de usuario; la decisión la toman el escáner y el servidor.</div>
+</figure>
+
+<p><b>2. Creación y organización del proyecto.</b> Se creó el proyecto con <code>create-expo-app</code> en la plantilla de Expo SDK 57, la misma versión de la práctica 3, y se eliminaron los componentes de ejemplo. El código quedó organizado así: <code>src/app</code> (rutas <code>index</code> de acceso, <code>credencial</code>, <code>creditos</code> y el <code>_layout</code> con un <code>Stack</code>), <code>src/api</code> (cliente de la API), <code>src/session.tsx</code> (contexto de sesión), <code>src/components</code> (<code>AppButton</code>, <code>Notice</code>, <code>TechItem</code>), <code>src/data</code> (equipo, curso y tecnologías), los archivos <code>theme.ts</code> y <code>styles.ts</code>, y el módulo nativo en <code>modules/cacao-hce</code>.</p>
+
+<div class="nb">
+<p><b>3. Nombre, logotipo e identidad visual.</b> Para una fábrica de chocolates se eligió el nombre <b>CacaoPass</b> y una paleta cálida y sobria: cacao oscuro (<code>#1B110C</code>, <code>#2A1B14</code>) para fondos y superficies, crema (<code>#F7EDE4</code>) para el texto, dorado de envoltura (<code>#D9A441</code>) como único color de acción, verde para estados correctos y rojo terracota para errores. El logotipo combina una barra de chocolate con tres ondas NFC doradas, de modo que comunica a la vez el giro de la empresa y la función de la aplicación. Se dibujó por programa con Core Graphics (<code>tools/make_icons.swift</code>), que genera el ícono, las capas del ícono adaptable de Android (fondo, primer plano y monocromático para los íconos temáticos) y la pantalla de bienvenida (figura 2).</p>
+<figure>
+  <div style="display:flex; gap:18px; justify-content:center; align-items:center; background:#1B110C; border-radius:10px; padding:14px; margin:0 60px;">
+    <img src="../assets/images/logo.png" style="width:120px">
+    <img src="../assets/images/icon.png" style="width:120px; border-radius:60px">
+    <img src="../assets/images/android-icon-monochrome.png" style="width:120px">
+  </div>
+  <div class="cap">Figura 2. Logotipo de CacaoPass (izquierda), ícono adaptable de Android recortado en círculo (centro) y capa monocromática para íconos temáticos (derecha).</div>
+</figure>
+</div>
+
+<p><b>4. Pantalla de acceso.</b> Muestra el logotipo, el nombre y un lema, los campos de usuario y contraseña, el botón «Entrar» y el botón «Créditos». Los campos vacíos se validan antes de llamar al servidor y el error aparece debajo del campo (H5); mientras se verifica la identidad, el botón muestra un indicador de progreso y se deshabilita para evitar peticiones duplicadas (H1). La función <code>login()</code> calcula el SHA-256 de la contraseña con <code>expo-crypto</code>, envía el formulario con un tiempo límite de 15 s y traduce cada situación a un mensaje propio (tabla 1); el texto del servidor nunca se muestra porque puede incluir la consulta SQL. Las URL de las fotos de perfil llegan con <code>http://</code>, que Android bloquea, y se convierten a <code>https://</code>.</p>
+<table>
+  <tr><th>SITUACIÓN</th><th>CÓMO SE DETECTA</th><th>MENSAJE AL USUARIO</th></tr>
+  <tr><td>Campos vacíos</td><td>Validación local</td><td>«Escribe tu nombre de usuario» / «Escribe tu contraseña»</td></tr>
+  <tr><td>Usuario o contraseña incorrectos</td><td><code>{"error": "Failed to login"}</code> con HTTP 200</td><td>«Usuario o contraseña incorrectos». Revisa mayúsculas y minúsculas.</td></tr>
+  <tr><td>Token ausente o rechazado</td><td>Token vacío o <code>{"error": "Unauthorized"}</code></td><td>«La app no está autorizada». No es un problema de tu cuenta.</td></tr>
+  <tr><td>Sin red</td><td>Excepción de <code>fetch</code></td><td>«Sin conexión con el servidor». Revisa Wi-Fi o datos.</td></tr>
+  <tr><td>Servidor lento o caído</td><td>Tiempo límite de 15 s / HTTP 5xx</td><td>«El servidor tardó demasiado» / «El servidor tuvo un problema»</td></tr>
+  <tr><td>Respuesta inválida</td><td>JSON inválido o número de usuario fuera de 32 bits</td><td>«Respuesta inesperada del servidor»</td></tr>
+</table>
+<div class="cap">Tabla 1. Errores contemplados en el acceso.</div>
+
+<p><b>5. Imagen de perfil.</b> Se cambió la imagen de perfil de cada integrante con el endpoint <code>POST /api/setpfp</code> de la API, que recibe el token, el número de usuario y un archivo JPG o PNG de máximo 2 MB <span class="todo">[indicar si se usó la app de la tarea 10 o la API directamente, y agregar las imágenes utilizadas]</span>.</p>
+<div class="slot">Figura 3. Imágenes de perfil utilizadas por cada integrante.</div>
+
+<p><b>6. Módulo nativo de emulación de tarjeta.</b> Ninguna biblioteca de React Native para NFC permite contestar comandos APDU arbitrarios en modo HCE, así que se escribió un módulo local con la API de Módulos de Expo (<code>modules/cacao-hce</code>). Su <code>AndroidManifest.xml</code> declara los permisos <code>NFC</code> y <code>VIBRATE</code> y el servicio <code>CacaoApduService</code> protegido con <code>BIND_NFC_SERVICE</code>, y el archivo <code>res/xml/cacao_apduservice.xml</code> registra el AID <code>F012345678</code> en la categoría <code>other</code> con <code>requireDeviceUnlock="true"</code>. La lógica del protocolo se separó en el objeto <code>ApduProtocol</code>, sin dependencias de Android, para poder probarla sin lector:</p>
+<pre>fun userIdToBytes(userId: Int, littleEndian: Boolean): ByteArray {
+  val bigEndian = byteArrayOf((userId shr 24).toByte(), (userId shr 16).toByte(),
+                              (userId shr 8).toByte(), userId.toByte())
+  return if (littleEndian) bigEndian.reversedArray() else bigEndian
+}
+
+fun respond(apdu: ByteArray?, userId: Int?, littleEndian: Boolean): ByteArray = when {
+  apdu == null -> SW_NO_PRECISE_DIAGNOSIS                     // 6F 00
+  !isSelectAid(apdu) -> SW_INS_NOT_SUPPORTED                  // 6D 00
+  userId == null -> SW_CONDITIONS_NOT_SATISFIED               // 69 85
+  else -> userIdToBytes(userId, littleEndian) + SW_OK         // 4 bytes + 90 00
+}</pre>
+<p>Como Android puede despertar al servicio con la aplicación cerrada, cuando la parte de JavaScript no está corriendo, el número de usuario se guarda del lado nativo en <code>SharedPreferences</code> (<code>CredentialStore</code>). Al recibir el SELECT, el servicio vibra 120 ms y emite el evento <code>onReaderDetected</code> por un puente estático (<code>HceEvents</code>) que el módulo reenvía a JavaScript. El módulo <code>CacaoHceModule</code> expone <code>setCredential</code>, <code>clearCredential</code>, <code>getStatus</code> (si hay NFC, si está encendido, si hay HCE y si el servicio es el predeterminado para el AID), <code>setLittleEndian</code>, <code>simulateSelect</code> y <code>openNfcSettings</code>, y al pasar la actividad a primer plano llama a <code>setPreferredService</code> para ganar el AID si en el mismo teléfono está instalada la aplicación de ejemplo, que usa el mismo identificador.</p>
+
+<p><b>7. Sesión y pantalla de credencial.</b> Al iniciar sesión, el contexto <code>SessionProvider</code> entrega el número de usuario al servicio y guarda los datos del usuario (sin la contraseña) en <code>expo-secure-store</code>, de modo que la credencial esté lista al llegar a la puerta sin volver a escribir la contraseña. La pantalla «Mi credencial» tiene forma de gafete: franja dorada «CACAOPASS · ACCESO A PLANTA», foto de perfil (con iniciales como sustituto si no carga), nombre completo en letra grande y el número de usuario de forma prominente. Debajo, un aviso indica el estado del NFC (sin NFC, sin HCE, apagado con botón para abrir los ajustes, o «Credencial lista»), y se actualiza al volver a la aplicación. Cuando el escáner selecciona el AID, además de la vibración, un anillo verde se anima alrededor de la foto y aparece «Lector detectado» con la hora en que se envió el número; la aplicación no indica si se concedió el acceso, porque no lo sabe ni consulta el endpoint del escáner. La sección «Detalles técnicos» muestra el AID, los cuatro bytes que se enviarán, un interruptor para cambiar el orden de los bytes y el botón «Probar respuesta APDU», que ejecuta la misma lógica del servicio con un SELECT idéntico al del firmware. «Cerrar sesión» pide confirmación y borra la credencial del servicio.</p>
+
+<p><b>8. Pantalla de créditos.</b> Lista a los integrantes con su matrícula, el grupo, el docente, la fecha y dos bloques de tecnologías con su logotipo oficial: las de la aplicación (React Native, Expo y Expo Router, TypeScript, Kotlin y Android HCE) y las del sistema de acceso (Arduino Nano ESP32, ESP32-S3, PN532, Node.js, Express y MySQL). Los logotipos se tomaron de Simple Icons (licencia CC0) y se dibujan como SVG con <code>react-native-svg</code>; un guion (<code>tools/extract-logos.mjs</code>) copia solo los diez trazos necesarios para no empaquetar los más de tres mil íconos de la biblioteca.</p>
+
+<p><b>9. Compilación y pruebas sin lector.</b> Se generó el proyecto nativo con <code>npx expo prebuild</code> y se compiló con <code>npx expo run:android</code> usando JDK 17; el primer compilado tardó 28 min 43 s porque Gradle descargó el NDK, CMake y la plataforma 36 del SDK y compiló las bibliotecas nativas de React Native para x86_64. Se escribieron siete pruebas unitarias con JUnit para <code>ApduProtocol</code> que, entre otras cosas, imitan el <code>memcpy</code> del firmware y comprueban que el escáner lee exactamente el número enviado; las siete pasaron (<code>gradlew :cacao-hce:testDebugUnitTest</code>, 0 fallas, 0 errores). En el emulador se probaron la validación de campos, el mensaje cuando falta el token de la API, el aviso de falta de NFC y el botón «Probar respuesta APDU», que ejecuta el código en Kotlin y devolvió <code>15 5D 03 00 90 00</code> ante el mismo SELECT que envía el firmware (figuras 4 y 5).</p>
+<figure>
+  <div class="shots">
+    <img src="img/acceso.png" style="height:300px"><img src="img/validacion.png" style="height:300px"><img src="img/error_token.png" style="height:300px"><img src="img/creditos.png" style="height:300px">
+  </div>
+  <div class="cap">Figura 4. Pantallas en el emulador (de izquierda a derecha): acceso, validación de campos vacíos, aviso por token ausente y créditos.</div>
+</figure>
+<figure>
+  <div class="shots">
+    <img src="img/credencial_emulador.png" style="height:300px"><img src="img/apdu_emulador.png" style="height:300px">
+  </div>
+  <div class="cap">Figura 5. Credencial y «Detalles técnicos» en el emulador, con una sesión de prueba local (sin iniciar sesión en la API) y el resultado del botón «Probar respuesta APDU». El emulador no tiene NFC, por eso aparece el aviso.</div>
+</figure>
+
+<p><b>10. Compilación final y prueba con el escáner.</b> Para la demostración se generó un APK independiente con <code>npx expo run:android --variant release</code> y se instaló en el teléfono. Se probó con el usuario de cada integrante, uno de los cuales fue suspendido previamente por el docente en la base de datos <span class="todo">[resultados de la sesión de clase]</span>.</p>
+<div class="slot">Figura 6. Credencial en el teléfono físico al detectar el escáner.</div>
+<div class="slot">Figura 7. Panel web mostrando los intentos de acceso de cada integrante.</div>
+<div class="slot">Figura 8. Sistema físico concediendo (LED verde) y negando (LED rojo) el acceso.</div>
+
+<h2>Análisis de Resultados</h2>
+<p>La aplicación cumple los requisitos de la asignación: está hecha con React Native y Expo; tiene pantalla de acceso con usuario, contraseña, logotipo y nombre acordes con una fábrica de chocolates; tras autenticarse muestra la credencial con la imagen del usuario, su nombre completo y su número de usuario; entrega ese número en 4 bytes al escáner mediante NFC y APDU; avisa al usuario con vibración y un mensaje en pantalla cuando detecta el escáner, sin indicar el resultado ni consultar el endpoint del escáner; y la pantalla principal tiene el botón de créditos con los integrantes, el grupo, la fecha y el tech stack con logotipos oficiales.</p>
+<p>El factor que más contribuyó fue leer el firmware antes de escribir la aplicación. La aplicación de ejemplo convierte el número a bytes en orden <i>big-endian</i> y aun así funciona, pero solo porque el firmware reconoce sus dos credenciales por el último byte. Con un número de usuario real, ese mismo orden habría hecho que el escáner consultara el usuario 358417152 en lugar del 220437, el servidor no lo habría encontrado y el acceso se habría negado sin ningún error visible en el teléfono: la aplicación habría «funcionado» (el lector la detecta y vibra) y aun así habría fallado. Las pruebas unitarias que imitan el <code>memcpy</code> del firmware convierten esa suposición en algo verificable, y el interruptor de orden de bytes permite corregirlo en la demostración si el firmware cambia.</p>
+<p>Problemas encontrados y soluciones:</p>
+<ul>
+  <li><b>Sin biblioteca para HCE con APDU propio.</b> Las bibliotecas NFC de React Native leen etiquetas o emulan etiquetas NDEF, pero no permiten contestar el SELECT de un AID propietario. Se resolvió con un módulo local en Kotlin con la API de Módulos de Expo, lo que obligó a dejar Expo Go y usar una compilación de desarrollo.</li>
+  <li><b>El servicio debe responder con la aplicación cerrada.</b> Si el número de usuario viviera solo en el estado de React, el escáner recibiría <code>69 85</code> cada vez que Android hubiera cerrado la aplicación. Se guardó del lado nativo en <code>SharedPreferences</code>, y la sesión en <code>expo-secure-store</code>.</li>
+  <li><b>El emulador no tiene NFC.</b> No es posible probar HCE en el emulador. Se aisló la lógica del protocolo para probarla con JUnit y se agregó «Probar respuesta APDU», que muestra los bytes exactos que recibiría el escáner.</li>
+  <li><b>Posible conflicto de AID.</b> La aplicación de ejemplo registra el mismo AID; si ambas están instaladas, Android puede preguntar cuál usar o elegir la otra. Se previno con <code>setPreferredService</code> mientras CacaoPass está en primer plano, y «Detalles técnicos» muestra si el servicio es el predeterminado.</li>
+  <li><b>Token de la API.</b> Para no publicarlo en GitHub se leyó de <code>.env.local</code>, archivo ignorado por git; se documentó que, por el prefijo <code>EXPO_PUBLIC_</code>, sigue incrustado en el APK.</li>
+  <li><b>Metro en modo CI no recarga.</b> Un cambio en el código no aparecía en el emulador porque <code>expo run:android</code> se ejecutó con <code>CI=1</code>, que desactiva la recarga de Metro y sirve siempre el primer empaquetado. Se detuvo ese servidor y se levantó otro con <code>npx expo start --dev-client</code>, abriendo la aplicación con el enlace <code>cacaopass://expo-development-client/?url=...</code>.</li>
+  <li><b>Capturas del emulador.</b> El emulador tiene dos pantallas y <code>adb screencap</code> sin indicar cuál devolvía una advertencia en lugar de una imagen; se resolvió con la opción <code>-d</code> y el identificador de la pantalla principal.</li>
+  <li><b>Entorno de compilación.</b> La caché de npm tenía archivos sin permisos de escritura (<code>EACCES</code>) y se usó una caché alterna; el JDK del sistema (23) y el de Android Studio (25) son más nuevos que lo recomendado para React Native, por lo que se compiló con JDK 17; y <code>expo run:android --device</code> espera el nombre del AVD, no el identificador de <code>adb</code>.</li>
+  <li><span class="todo">[Problemas observados en la prueba con el escáner y el teléfono físico, y cómo se resolvieron]</span></li>
+</ul>
+<table>
+  <tr><th>#</th><th>PRUEBA</th><th>ENTORNO</th><th>RESULTADO ESPERADO</th><th>RESULTADO OBTENIDO</th></tr>
+  <tr><td class="c">1</td><td>Respuesta APDU y lectura con <code>memcpy</code> (7 pruebas JUnit)</td><td>JVM</td><td>El escáner lee el mismo número enviado</td><td>Correcto: 7 de 7</td></tr>
+  <tr><td class="c">2</td><td>Campos vacíos</td><td>Emulador</td><td>Mensaje debajo de cada campo, sin petición</td><td>Correcto (figura 4)</td></tr>
+  <tr><td class="c">3</td><td>Sin token de la API configurado</td><td>Emulador</td><td>«La app no está autorizada», sin petición al servidor</td><td>Correcto (figura 4)</td></tr>
+  <tr><td class="c">4</td><td>Contraseña incorrecta y modo avión</td><td>Emulador</td><td>«Usuario o contraseña incorrectos» / «Sin conexión con el servidor»</td><td><span class="todo">[pendiente: requiere el token]</span></td></tr>
+  <tr><td class="c">5</td><td>Credencial y «Probar respuesta APDU» en equipo sin NFC</td><td>Emulador</td><td>Aviso «Este dispositivo no tiene NFC» y respuesta <code>15 5D 03 00 90 00</code></td><td>Correcto (figura 5)</td></tr>
+  <tr><td class="c">6</td><td>NFC apagado</td><td>Teléfono</td><td>Aviso y botón a los ajustes de NFC</td><td><span class="todo">[ ]</span></td></tr>
+  <tr><td class="c">7</td><td>Usuario activo frente al escáner</td><td>Teléfono + escáner</td><td>Vibración, «Lector detectado», LED verde y registro en el panel</td><td><span class="todo">[ ]</span></td></tr>
+  <tr><td class="c">8</td><td>Usuario suspendido frente al escáner</td><td>Teléfono + escáner</td><td>Vibración, «Lector detectado», LED rojo y registro en el panel</td><td><span class="todo">[ ]</span></td></tr>
+  <tr><td class="c">9</td><td>Teléfono bloqueado frente al escáner</td><td>Teléfono + escáner</td><td>No responde hasta desbloquear</td><td><span class="todo">[ ]</span></td></tr>
+</table>
+<div class="cap">Tabla 2. Pruebas realizadas.</div>
+<p>También se identificaron limitaciones del sistema en su conjunto. La credencial es un número fijo de 4 bytes que viaja en claro: cualquiera que lo lea (otro lector, o un teléfono con el número de otra persona) puede reproducirlo, y el escáner no tiene forma de saber que la respuesta viene del teléfono legítimo. El escáner consulta al servidor por HTTP sin cifrar con un token fijo en la URL, de modo que alguien en la misma red podría falsificar la respuesta «si». Recordar la sesión agiliza el paso por la puerta, pero convierte al teléfono desbloqueado en la llave: <code>requireDeviceUnlock</code> mitiga el robo de un teléfono bloqueado, no el préstamo de uno desbloqueado. Y si el Wi-Fi o el servidor fallan, nadie puede entrar, porque el escáner no conserva ninguna lista local.</p>
+
+<h3>Mejoras a futuro</h3>
+<ul>
+  <li><b>Protocolo.</b> Sustituir el número fijo por reto-respuesta: el escáner manda un número aleatorio en el comando APDU y la aplicación lo firma con una clave privada generada en el Android Keystore (que nunca sale del teléfono) y registrada en el servidor al iniciar sesión; el servidor valida la firma y descarta retos repetidos. Así, copiar una respuesta no sirve para entrar.</li>
+  <li><b>Canal escáner-servidor.</b> HTTPS en el ESP32 con <code>WiFiClientSecure</code> y el certificado del servidor fijado, token por dispositivo en un encabezado y respuestas firmadas con un nonce para evitar falsificaciones.</li>
+  <li><b>Tolerancia a fallas.</b> Una lista local de usuarios activos en el ESP32, sincronizada periódicamente, para operar sin red, y un relevador con cerradura electromagnética en lugar de solo un LED.</li>
+  <li><b>Aplicación.</b> Bloquear la credencial con biometría al abrirla, renovar la sesión con un token de vida corta en lugar de recordarla indefinidamente, y un mosaico de ajustes rápidos o widget para mostrar la credencial sin abrir la aplicación.</li>
+  <li><b>Panel web (calidad de vida).</b> Historial persistente con fecha, hora, puerta y resultado; filtros por usuario, estado y rango de fechas; foto del usuario junto a cada intento; alerta sonora y resaltado en rojo para accesos negados o usuarios desconocidos; contador de personas dentro de cada área (anti-<i>passback</i>); exportación a CSV; y un botón para suspender o reactivar a un usuario directamente desde el panel.</li>
+</ul>
+
+<h2>Conclusiones</h2>
+<p class="todo"><b>[PENDIENTE: redactar con sus propias palabras.]</b> Párrafo 1: justificación dirigida a una empresa hipotética del ramo chocolatero sobre las ventajas de adquirir el sistema. Párrafo 2: desventajas, riesgos o detrimentos, desde el punto de vista del usuario, de obligarle a cargar su credencial en una aplicación móvil. Ver <code>reporte/guia_conclusiones.md</code>.</p>
+
+<h2>Bibliografía</h2>
+<p class="ref">Arduino. (s.f.). <i>Nano ESP32</i>. Arduino Documentation. Recuperado el 26 de octubre de 2026, de https://docs.arduino.cc/hardware/nano-esp32/</p>
+<p class="ref">Elechouse. (s.f.). <i>PN532 NFC RFID module user guide</i> (versión 3). Recuperado el 26 de octubre de 2026, de https://www.elechouse.com/elechouse/images/product/PN532_module_V3/PN532_%20Manual_V3.pdf</p>
+<p class="ref">Espressif Systems. (s.f.). <i>ESP32-S3 technical reference manual</i>. Recuperado el 26 de octubre de 2026, de https://www.espressif.com/sites/default/files/documentation/esp32-s3_technical_reference_manual_en.pdf</p>
+<p class="ref">Expo. (s.f.). <i>Expo Modules API: Overview</i>. Expo Documentation. Recuperado el 26 de octubre de 2026, de https://docs.expo.dev/modules/overview/</p>
+<p class="ref">Expo. (s.f.). <i>Introduction to development builds</i>. Expo Documentation. Recuperado el 26 de octubre de 2026, de https://docs.expo.dev/develop/development-builds/introduction/</p>
+<p class="ref">Expo. (s.f.). <i>Environment variables in Expo</i>. Expo Documentation. Recuperado el 26 de octubre de 2026, de https://docs.expo.dev/guides/environment-variables/</p>
+<p class="ref">Expo. (s.f.). <i>SecureStore</i>. Expo Documentation. Recuperado el 26 de octubre de 2026, de https://docs.expo.dev/versions/latest/sdk/securestore/</p>
+<p class="ref">Google. (s.f.). <i>Host-based card emulation overview</i>. Android Developers. Recuperado el 26 de octubre de 2026, de https://developer.android.com/develop/connectivity/nfc/hce</p>
+<p class="ref">Google. (s.f.). <i>CardEmulation</i>. Android Developers. Recuperado el 26 de octubre de 2026, de https://developer.android.com/reference/android/nfc/cardemulation/CardEmulation</p>
+<p class="ref">International Organization for Standardization. (2018). <i>Cards and security devices for personal identification — Contactless proximity objects — Part 4: Transmission protocol</i> (ISO/IEC 14443-4:2018).</p>
+<p class="ref">International Organization for Standardization. (2020). <i>Identification cards — Integrated circuit cards — Part 4: Organization, security and commands for interchange</i> (ISO/IEC 7816-4:2020).</p>
+<p class="ref">Mandujano, F. (2026). <i>NFCAccesoFisico</i> [Repositorio de código]. GitHub. https://github.com/fmg2099/NFCAccesoFisico</p>
+<p class="ref">Monsterball Go. (s.f.). <i>Documentación de la API «Monsterball Go»</i>. Recuperado el 26 de octubre de 2026, de https://monsterballgo.com/docs</p>
+<p class="ref">Nielsen, J. (2024). <i>10 usability heuristics for user interface design</i>. Nielsen Norman Group. Recuperado el 26 de octubre de 2026, de https://www.nngroup.com/articles/ten-usability-heuristics/</p>
+<p class="ref">Simple Icons. (s.f.). <i>Simple Icons: Free SVG icons for popular brands</i>. Recuperado el 26 de octubre de 2026, de https://simpleicons.org</p>
+
+</body>
+</html>
